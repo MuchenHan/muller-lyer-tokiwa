@@ -3,552 +3,387 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ミューラー・リヤー錯視実験</title>
-  <!-- jsPsych 7.3 CDN -->
+  <title>ミューラー・リヤー錯視実験（調整法）</title>
   <script src="https://unpkg.com/jspsych@7.3.4"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-instructions@1.1.4"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3"></script>
   <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
   <style>
-    /* カスタムスタイル */
-    .jspsych-content {
-      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
-    }
-    .stimulus-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 60px;
-      margin: 40px 0;
-    }
-    .figure-label {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 5px;
-    }
-    .instruction-box {
-      max-width: 700px;
-      text-align: left;
-      line-height: 1.8;
-      font-size: 18px;
-    }
-    .instruction-box h2 {
-      color: #1E3A5F;
-      border-bottom: 2px solid #2E8B7B;
-      padding-bottom: 8px;
-    }
-    .key-instruction {
-      background: #f0f7f5;
-      padding: 20px;
-      border-radius: 8px;
-      margin: 20px 0;
-      text-align: center;
-      font-size: 20px;
-    }
-    .key-box {
-      display: inline-block;
-      background: #1E3A5F;
-      color: white;
-      padding: 8px 20px;
-      border-radius: 4px;
-      margin: 0 10px;
-      font-weight: bold;
-    }
-    .progress-text {
-      font-size: 14px;
-      color: #888;
-      margin-bottom: 10px;
-    }
+    .jspsych-content { font-family: "Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; }
+    .jspsych-content-wrapper { max-width: 1100px; }
+    .instruction-box { max-width: 780px; text-align: left; line-height: 1.8; font-size: 17px; }
+    .instruction-box h2 { color: #1E3A5F; border-bottom: 2px solid #2E8B7B; padding-bottom: 6px; }
+    .stim-wrap { display:flex; justify-content:center; align-items:center; margin: 18px 0; }
+    .trial-info { font-size: 14px; color: #888; margin-bottom: 6px; }
+    .note-box { background:#fff5e6; border-left:4px solid #e89c3a; padding:10px 14px; margin:12px 0; font-size:15px; }
+    .hint { color:#666; font-size:13px; }
+    .big-btn { font-size:18px; padding:10px 26px; }
   </style>
 </head>
 <body></body>
 <script>
-// ============================================
-// ミューラー・リヤー錯視実験
-// jsPsych 7.3 + Google Apps Script (GAS) + Sheets 対応版
-// 常磐大学 心理学実験演習
-// ============================================
+// ============================================================
+// ミューラー・リヤー錯視実験（書籍準拠・実験者調整法スライダー版）
+// 独立変数: 鋏角 (15° / 30° / 60°) の 1 要因 3 水準 被験者内
+// 従属変数: 錯視量 = 内向図形主線長 − 外向図形主線長 (mm)
+// 試行数: 8 試行 × 3 条件 = 24 試行
+// 条件順序: 学籍番号末位 %6 で 6 順列割当（カウンターバランス）
+// ============================================================
 
-// GAS Web App endpoint（Sheet への書き込み先）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz5wStCaP_MhyCaood5w1cwO-vnwK4-n9W9ks7z5sHVfh4O5wDKqvrZJhgoHnNQs0-Lvg/exec';
 
-// jsPsych初期化
+// ---- 実験パラメータ ----
+const PX_PER_MM        = 3.78;   // CSS: 1mm ≈ 3.78px (96 DPI)
+const STANDARD_MM      = 100;    // 内向図形主線の固定長
+const FIN_MM           = 30;     // 鋏辺の長さ（書籍指定）
+const COMP_MIN_MM      = 40;
+const COMP_MAX_MM      = 160;
+const ANGLES_DEG       = [15, 30, 60];
+const TRIALS_PER_COND  = 8;      // 図4.5 の 8 順序
+
+// 図4.5 の提示順序：[系列, 標準図形位置] ×8
+// 系列: 'up'=上昇(短→長), 'down'=下降(長→短)
+// stdSide: 'right'=内向右（外向左）, 'left'=内向左（外向右）
+const FIG45_ORDER = [
+  { series:'up',   stdSide:'right' }, // (1)
+  { series:'down', stdSide:'left'  }, // (2)
+  { series:'down', stdSide:'right' }, // (3)
+  { series:'up',   stdSide:'left'  }, // (4)
+  { series:'up',   stdSide:'right' }, // (5)
+  { series:'down', stdSide:'left'  }, // (6)
+  { series:'down', stdSide:'right' }, // (7)
+  { series:'up',   stdSide:'left'  }  // (8)
+];
+
+// 6 順列：書籍 p.23 の例に基づく
+const CONDITION_PERMUTATIONS = [
+  [15,30,60],[30,60,15],[60,15,30],
+  [15,60,30],[30,15,60],[60,30,15]
+];
+
+// ============================================================
+// jsPsych 初期化
+// ============================================================
 const jsPsych = initJsPsych({
   on_finish: function() {
-    // main 試行だけを抽出して GAS に送信
     const mainTrials = jsPsych.data.get().filter({ task: 'main' }).values().map(t => ({
-      trial_number: t.trial_number,
-      condition: t.condition,
-      comparison_length_mm: t.comparison_length_mm,
-      response_longer: t.response_longer,
+      participant_id: t.participant_id,
+      order_index: t.order_index,              // 全体の通し番号 1-24
+      condition_order: t.condition_order,      // 条件内での通し 1-8
+      angle_deg: t.angle_deg,
+      series: t.series,
+      std_side: t.std_side,
+      start_mm: t.start_mm,
+      response_mm: t.response_mm,              // 被験者が合わせた外向主線長
+      illusion_mm: t.illusion_mm,              // = standard − response
       rt_ms: t.rt_ms
     }));
-
     const pid = jsPsych.data.get().values()[0].participant_id || 'UNKNOWN';
+    const perm = jsPsych.data.get().values()[0].permutation_index;
     const payload = {
       participant_id: pid,
+      permutation_index: perm,
       user_agent: navigator.userAgent,
+      method: 'adjustment',
       trials: mainTrials
     };
-
-    // GAS に POST（Content-Type: text/plain で preflight を回避）
     fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify(payload)
     })
-    .then(r => r.json())
-    .then(res => {
-      if (!res.ok) throw new Error(res.error || 'unknown');
-      console.log('saved to Sheet:', res.n, 'rows');
-    })
+    .then(r=>r.json())
+    .then(res => { if(!res.ok) throw new Error(res.error||'unknown'); console.log('saved',res.n,'rows'); })
     .catch(err => {
-      console.warn('GAS 保存失敗、ローカル CSV にフォールバック:', err);
-      jsPsych.data.get().localSave('csv', `muller_${pid}.csv`);
-      alert('サーバ保存に失敗しました。CSV ファイルが自動ダウンロードされます。教員に送ってください。');
+      console.warn('GAS保存失敗 → CSV fallback:', err);
+      jsPsych.data.get().localSave('csv', `muller_adj_${pid}.csv`);
+      alert('サーバ保存に失敗しました。\nCSVファイルがダウンロードされました。\n「学籍番号_muller.csv」にリネームしmanabaから提出してください。');
     });
   },
   show_progress_bar: true,
   message_progress_bar: '進捗'
 });
 
-// ============================================
-// 実験パラメータ
-// ============================================
-const PARAMS = {
-  standardLength: 200,      // 標準刺激の長さ (px) = 50mm相当
-  comparisonLengths: [160, 176, 192, 208, 224, 240], // 40,44,48,52,56,60mm相当
-  arrowLength: 40,          // 矢羽の長さ (px)
-  arrowAngle: 45,           // 矢羽の角度 (度)
-  lineWidth: 4,             // 線の太さ
-  repetitions: 5,           // 各条件の繰り返し回数
-  fixationDuration: 500,    // 注視点の表示時間 (ms)
-  standardDuration: 1000,   // 標準刺激の表示時間 (ms)
-  blankDuration: 500,       // ブランクの表示時間 (ms)
-};
-
-// ============================================
-// SVG刺激生成関数
-// ============================================
-function createMullerLyerSVG(length, condition, color = '#1E3A5F') {
-  const svgWidth = 400;
-  const svgHeight = 100;
-  const centerX = svgWidth / 2;
-  const centerY = svgHeight / 2;
-  const halfLength = length / 2;
-  
-  // 矢羽の計算
-  const arrowLen = PARAMS.arrowLength;
-  const angle = PARAMS.arrowAngle * Math.PI / 180;
-  const dx = arrowLen * Math.cos(angle);
-  const dy = arrowLen * Math.sin(angle);
-  
-  let arrowsLeft = '';
-  let arrowsRight = '';
-  
-  if (condition === 'outward') {
-    // 外向き矢羽 (><) - 短く見える
-    arrowsLeft = `
-      <line x1="${centerX - halfLength}" y1="${centerY}" 
-            x2="${centerX - halfLength - dx}" y2="${centerY - dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-      <line x1="${centerX - halfLength}" y1="${centerY}" 
-            x2="${centerX - halfLength - dx}" y2="${centerY + dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-    `;
-    arrowsRight = `
-      <line x1="${centerX + halfLength}" y1="${centerY}" 
-            x2="${centerX + halfLength + dx}" y2="${centerY - dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-      <line x1="${centerX + halfLength}" y1="${centerY}" 
-            x2="${centerX + halfLength + dx}" y2="${centerY + dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-    `;
-  } else if (condition === 'inward') {
-    // 内向き矢羽 (<>) - 長く見える
-    arrowsLeft = `
-      <line x1="${centerX - halfLength}" y1="${centerY}" 
-            x2="${centerX - halfLength + dx}" y2="${centerY - dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-      <line x1="${centerX - halfLength}" y1="${centerY}" 
-            x2="${centerX - halfLength + dx}" y2="${centerY + dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-    `;
-    arrowsRight = `
-      <line x1="${centerX + halfLength}" y1="${centerY}" 
-            x2="${centerX + halfLength - dx}" y2="${centerY - dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-      <line x1="${centerX + halfLength}" y1="${centerY}" 
-            x2="${centerX + halfLength - dx}" y2="${centerY + dy}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-    `;
-  }
-  // condition === 'none' の場合は矢羽なし
-  
+// ============================================================
+// SVG 刺激生成
+// ============================================================
+// 鋏角 = 鋏辺と主線のなす角（書籍 p.17 定義）。
+// 外向図形: 鋏辺は主線の外側へ（< — >）→ 矢印の先端が外側
+// 内向図形: 鋏辺は主線の内側へ（> — <）→ 矢印の先端が内側
+function buildFigure(mainMm, finMm, angleDeg, kind) {
+  // kind: 'inward' or 'outward'
+  const mainPx = mainMm * PX_PER_MM;
+  const finPx  = finMm * PX_PER_MM;
+  const rad = angleDeg * Math.PI / 180;
+  const dx = finPx * Math.cos(rad);
+  const dy = finPx * Math.sin(rad);
+  // SVG padding = finPx 程度
+  const pad = Math.max(dx, 20) + 10;
+  const width = mainPx + 2*pad;
+  const height = 2*dy + 20;
+  const cy = height/2;
+  const x1 = pad;
+  const x2 = pad + mainPx;
+  // 鋏辺の向き符号
+  // 外向: 左端の 2 鋏辺は 左外へ (x1-dx,cy±dy)、右端は右外へ (x2+dx,cy±dy)
+  // 内向: 左端の 2 鋏辺は 右内へ (x1+dx,cy±dy)、右端は左内へ (x2-dx,cy±dy)
+  const sgn = (kind==='outward') ? -1 : +1;
+  const fx_l = x1 + sgn*dx;  const fx_r = x2 - sgn*dx;
+  const up = cy - dy;        const dn = cy + dy;
+  const stroke = 'black';
+  const sw = 2;
   return `
-    <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <!-- 主線 -->
-      <line x1="${centerX - halfLength}" y1="${centerY}" 
-            x2="${centerX + halfLength}" y2="${centerY}" 
-            stroke="${color}" stroke-width="${PARAMS.lineWidth}" stroke-linecap="round"/>
-      ${arrowsLeft}
-      ${arrowsRight}
+      <line x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" stroke="${stroke}" stroke-width="${sw}"/>
+      <!-- 左端 鋏辺 2 本 -->
+      <line x1="${x1}" y1="${cy}" x2="${fx_l}" y2="${up}" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="${x1}" y1="${cy}" x2="${fx_l}" y2="${dn}" stroke="${stroke}" stroke-width="${sw}"/>
+      <!-- 右端 鋏辺 2 本 -->
+      <line x1="${x2}" y1="${cy}" x2="${fx_r}" y2="${up}" stroke="${stroke}" stroke-width="${sw}"/>
+      <line x1="${x2}" y1="${cy}" x2="${fx_r}" y2="${dn}" stroke="${stroke}" stroke-width="${sw}"/>
     </svg>
   `;
 }
 
-// ============================================
-// タイムライン構築
-// ============================================
-let timeline = [];
+function buildPairSVG(angleDeg, compMm, stdSide) {
+  // 標準（内向）と比較（外向）を左右に並べて表示
+  const inward  = buildFigure(STANDARD_MM, FIN_MM, angleDeg, 'inward');
+  const outward = buildFigure(compMm,      FIN_MM, angleDeg, 'outward');
+  const left  = (stdSide==='left')  ? inward  : outward;
+  const right = (stdSide==='left')  ? outward : inward;
+  return `
+    <div class="stim-wrap" style="flex-direction:column; gap:40px;">
+      <div>${left}</div>
+      <div>${right}</div>
+    </div>
+  `;
+}
 
-// ----- 1. 学籍番号入力 -----
-const participantInfo = {
+// ============================================================
+// 教示
+// ============================================================
+const consent = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instruction-box">
+      <h2>ミューラー・リヤー錯視実験（調整法）</h2>
+      <p>本実験は心理物理学的測定法のひとつである <b>実験者調整法</b> を体験するものです。
+      所要時間は約 15〜20 分です。</p>
+      <p>同意の上で開始してください。</p>
+    </div>`,
+  choices: ['開始する']
+};
+
+const participant_info = {
   type: jsPsychSurveyText,
   questions: [
-    {
-      prompt: '<h2>実験参加登録</h2><p>学籍番号（8桁）を入力してください：</p>',
-      name: 'participant_id',
-      required: true,
-      placeholder: '例: 32500000'
-    }
+    { prompt: '学籍番号（数字7桁）', name: 'participant_id', required: true },
+    { prompt: '氏名（漢字）', name: 'name', required: true }
   ],
-  button_label: '次へ',
-  on_finish: function(data) {
-    jsPsych.data.addProperties({
-      participant_id: data.response.participant_id
-    });
+  on_finish: (data) => {
+    const pid = data.response.participant_id.trim();
+    jsPsych.data.addProperties({ participant_id: pid, name: data.response.name });
+    // 学籍番号末位で順列割当
+    const last = parseInt(pid.slice(-1), 10);
+    const permIdx = isNaN(last) ? 0 : (last % 6);
+    jsPsych.data.addProperties({ permutation_index: permIdx });
+    window.__condOrder = CONDITION_PERMUTATIONS[permIdx];
   }
 };
-timeline.push(participantInfo);
 
-// ----- 2. 説明画面 -----
 const instructions = {
   type: jsPsychInstructions,
   pages: [
-    // ページ1: 実験の概要
-    `<div class="instruction-box">
-      <h2>ミューラー・リヤー錯視実験</h2>
-      <p>この実験では、<strong>線分の長さを比較</strong>していただきます。</p>
-      <p>画面に2つの線分が順番に表示されます：</p>
-      <ol>
-        <li><strong>標準刺激</strong>：矢羽のついた線分（基準）</li>
-        <li><strong>比較刺激</strong>：矢羽のない線分</li>
-      </ol>
-      <p>あなたの課題は、<strong>比較刺激の線分</strong>が標準刺激の線分より<br>
-      「長い」か「短い」かを判断することです。</p>
-    </div>`,
-    
-    // ページ2: 操作方法
-    `<div class="instruction-box">
-      <h2>操作方法</h2>
-      <div class="key-instruction">
-        <p>比較刺激が標準刺激より...</p>
-        <p>
-          <span class="key-box">F</span> 短い
-          &nbsp;&nbsp;&nbsp;&nbsp;
-          <span class="key-box">J</span> 長い
-        </p>
-      </div>
-      <p>💡 ポイント：</p>
-      <ul>
-        <li>直感的に、素早く判断してください</li>
-        <li>迷っても必ずどちらかを選んでください</li>
-        <li>線分の「主線」の長さを比較してください（矢羽は含みません）</li>
-      </ul>
-    </div>`,
-    
-    // ページ3: 試行の流れ
-    `<div class="instruction-box">
-      <h2>1試行の流れ</h2>
-      <ol>
-        <li><strong>注視点「+」</strong>が表示されます（0.5秒）</li>
-        <li><strong>標準刺激</strong>が表示されます（1秒）</li>
-        <li>画面が消えます（0.5秒）</li>
-        <li><strong>比較刺激</strong>が表示されます</li>
-        <li>キーを押して回答してください</li>
-      </ol>
-      <p>全部で <strong>60試行</strong>（約15〜20分）です。</p>
-      <p>途中で疲れたら、試行の合間に少し休んでも構いません。</p>
-    </div>`,
-    
-    // ページ4: 練習開始
-    `<div class="instruction-box">
-      <h2>練習試行</h2>
-      <p>まず、練習を5回行います。</p>
-      <p>操作に慣れてください。</p>
-      <div class="key-instruction">
-        <span class="key-box">F</span> 短い
-        &nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="key-box">J</span> 長い
-      </div>
-      <p>準備ができたら「次へ」を押してください。</p>
-    </div>`
+    `<div class="instruction-box"><h2>実験の概要</h2>
+     <p>画面には上下 2 つのミューラー・リヤー錯視図が表示されます。</p>
+     <ul>
+       <li><b>内向図形</b>（矢羽が内向き 「&gt;—&lt;」）… <b>標準図形</b>（長さ固定）</li>
+       <li><b>外向図形</b>（矢羽が外向き 「&lt;—&gt;」）… あなたが長さを調整</li>
+     </ul>
+     <p>課題は、2 本の<b>主線（水平線）</b>が「同じ長さに見える」位置を見つけることです。</p>
+     </div>`,
+    `<div class="instruction-box"><h2>操作方法</h2>
+     <ul>
+       <li>スライダーを左右にドラッグ、または ← / → キーで 1 mm 単位調整できます。</li>
+       <li>「同じ長さになった」と<b>感じた</b>ら、「確定」ボタンを押してください。</li>
+       <li><b>主線の端ではなく、図形全体を眺めて</b>判断してください。</li>
+       <li>定規・指で画面を測ることはしないでください。</li>
+     </ul>
+     <div class="note-box">系列には <b>上昇</b>（短→長）と <b>下降</b>（長→短）があり、
+     開始位置が毎回異なります。</div>
+     </div>`,
+    `<div class="instruction-box"><h2>試行構成</h2>
+     <p>鋏角 3 条件（15°/30°/60°）× 各 8 試行 = <b>合計 24 試行</b></p>
+     <p>条件の順序はあなたの学籍番号に応じて自動割当されます。</p>
+     <p>各条件の開始時に案内が出ます。疲れたら条件間で小休憩可能です。</p>
+     </div>`
   ],
   show_clickable_nav: true,
-  button_label_next: '次へ',
-  button_label_previous: '戻る'
+  button_label_previous: '戻る',
+  button_label_next: '次へ'
 };
-timeline.push(instructions);
 
-// ----- 3. 練習試行 -----
-const practiceTrials = [];
-
-// 練習用の試行を生成
-const practiceConditions = [
-  { condition: 'outward', comparison: 176 },
-  { condition: 'inward', comparison: 224 },
-  { condition: 'outward', comparison: 208 },
-  { condition: 'inward', comparison: 192 },
-  { condition: 'outward', comparison: 240 },
-];
-
-practiceConditions.forEach((trial, index) => {
-  // 注視点
-  practiceTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: '<p style="font-size: 48px;">+</p>',
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.fixationDuration,
-  });
-  
-  // 標準刺激
-  practiceTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="stimulus-container">
-        <div>
-          <div class="figure-label">標準刺激</div>
-          ${createMullerLyerSVG(PARAMS.standardLength, trial.condition)}
+// ============================================================
+// 練習試行（1 試行、15°・上昇・内向右 固定）
+// ============================================================
+function makeAdjustTrial(params, isPractice) {
+  // params: {angle_deg, series, std_side, order_index, condition_order}
+  const startMm = (params.series === 'up')
+    ? Math.round(STANDARD_MM - 30 + (Math.random()*10 - 5))   // 上昇: 短く開始 (65-75mm)
+    : Math.round(STANDARD_MM + 30 + (Math.random()*10 - 5));  // 下降: 長く開始 (125-135mm)
+  return {
+    type: jsPsychHtmlSliderResponse,
+    stimulus: '',                                          // 動的に組み立てる
+    labels: [`${COMP_MIN_MM} mm`, `${COMP_MAX_MM} mm`],
+    min: COMP_MIN_MM, max: COMP_MAX_MM, step: 1, slider_start: startMm,
+    require_movement: false,
+    button_label: '確定（はい）',
+    prompt: '', // below
+    on_start: function(trial) {
+      trial.data = Object.assign({
+        task: isPractice ? 'practice' : 'main',
+        start_mm: startMm
+      }, params);
+      // 初期描画
+      trial.stimulus = `
+        <div class="trial-info">
+          ${isPractice ? '【練習試行】' : `試行 ${params.order_index} / 24（${params.angle_deg}° 条件 ${params.condition_order}/8）`}
+          ・ 系列: ${params.series==='up'?'上昇':'下降'} ・ 標準: ${params.std_side==='left'?'左':'右'}
         </div>
-      </div>
-    `,
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.standardDuration,
-  });
-  
-  // ブランク
-  practiceTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: '',
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.blankDuration,
-  });
-  
-  // 比較刺激
-  practiceTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="stimulus-container">
-        <div>
-          <div class="figure-label">比較刺激</div>
-          ${createMullerLyerSVG(trial.comparison, 'none', '#C44536')}
-        </div>
-      </div>
-      <p style="margin-top: 30px;">
-        <span class="key-box">F</span> 短い
-        &nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="key-box">J</span> 長い
-      </p>
-    `,
-    choices: ['f', 'j'],
-    data: {
-      task: 'practice',
-      condition: trial.condition,
-      standard_length: PARAMS.standardLength,
-      comparison_length: trial.comparison,
-    },
-    on_finish: function(data) {
-      data.response_key = data.response;
-      data.response_longer = data.response === 'j' ? 1 : 0;
-    }
-  });
-  
-  // フィードバック（練習のみ）
-  practiceTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: function() {
-      const lastTrial = jsPsych.data.get().last(1).values()[0];
-      const correct = lastTrial.comparison_length > PARAMS.standardLength ? 'j' : 'f';
-      const isCorrect = lastTrial.response === correct;
-      
-      if (isCorrect) {
-        return '<p style="font-size: 24px; color: #2E8B7B;">✓ 正解</p>';
-      } else {
-        return '<p style="font-size: 24px; color: #C44536;">✗ 不正解</p>';
-      }
-    },
-    choices: "NO_KEYS",
-    trial_duration: 800,
-  });
-});
-
-timeline.push({
-  timeline: practiceTrials
-});
-
-// ----- 4. 本試行開始の告知 -----
-const startMain = {
-  type: jsPsychHtmlButtonResponse,
-  stimulus: `
-    <div class="instruction-box">
-      <h2>練習終了</h2>
-      <p>これから本試行を開始します。</p>
-      <p>全部で <strong>60試行</strong> です。</p>
-      <p>本試行ではフィードバックは表示されません。</p>
-      <div class="key-instruction">
-        <span class="key-box">F</span> 短い
-        &nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="key-box">J</span> 長い
-      </div>
-    </div>
-  `,
-  choices: ['本試行を開始する']
-};
-timeline.push(startMain);
-
-// ----- 5. 本試行 -----
-// 試行リストを生成
-let mainTrialList = [];
-const conditions = ['outward', 'inward'];
-
-conditions.forEach(cond => {
-  PARAMS.comparisonLengths.forEach(compLen => {
-    for (let rep = 0; rep < PARAMS.repetitions; rep++) {
-      mainTrialList.push({
-        condition: cond,
-        comparison_length: compLen,
-        repetition: rep + 1
-      });
-    }
-  });
-});
-
-// シャッフル
-mainTrialList = jsPsych.randomization.shuffle(mainTrialList);
-
-// 試行を構築
-const mainTrials = [];
-mainTrialList.forEach((trial, index) => {
-  // 注視点
-  mainTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: function() {
-      return `
-        <p class="progress-text">試行 ${index + 1} / ${mainTrialList.length}</p>
-        <p style="font-size: 48px;">+</p>
+        <div id="stim-area">${buildPairSVG(params.angle_deg, startMm, params.std_side)}</div>
+        <div class="hint">スライダーを動かすか ← / → キーで 1 mm 単位に調整できます。</div>
       `;
     },
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.fixationDuration,
-  });
-  
-  // 標準刺激
-  mainTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="stimulus-container">
-        <div>
-          <div class="figure-label">標準刺激</div>
-          ${createMullerLyerSVG(PARAMS.standardLength, trial.condition)}
-        </div>
-      </div>
-    `,
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.standardDuration,
-  });
-  
-  // ブランク
-  mainTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: '',
-    choices: "NO_KEYS",
-    trial_duration: PARAMS.blankDuration,
-  });
-  
-  // 比較刺激 + 反応
-  mainTrials.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="stimulus-container">
-        <div>
-          <div class="figure-label">比較刺激</div>
-          ${createMullerLyerSVG(trial.comparison_length, 'none', '#C44536')}
-        </div>
-      </div>
-      <p style="margin-top: 30px;">
-        <span class="key-box">F</span> 短い
-        &nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="key-box">J</span> 長い
-      </p>
-    `,
-    choices: ['f', 'j'],
-    data: {
-      task: 'main',
-      trial_number: index + 1,
-      condition: trial.condition,
-      standard_length_px: PARAMS.standardLength,
-      comparison_length_px: trial.comparison_length,
-      standard_length_mm: 50,
-      comparison_length_mm: Math.round(trial.comparison_length / PARAMS.standardLength * 50),
-      repetition: trial.repetition
+    on_load: function() {
+      const slider = document.querySelector('#jspsych-html-slider-response-response');
+      const area = document.querySelector('#stim-area');
+      const trialData = jsPsych.getCurrentTrial().data;
+      const redraw = (v) => { area.innerHTML = buildPairSVG(trialData.angle_deg, parseInt(v,10), trialData.std_side); };
+      slider.addEventListener('input', (e)=> redraw(e.target.value));
+      // キーボードで ±1mm
+      document.addEventListener('keydown', window.__adjKey = (e)=>{
+        if (e.key==='ArrowLeft' || e.key==='ArrowRight') {
+          e.preventDefault();
+          let v = parseInt(slider.value,10);
+          v += (e.key==='ArrowRight' ? 1 : -1);
+          v = Math.max(COMP_MIN_MM, Math.min(COMP_MAX_MM, v));
+          slider.value = v;
+          slider.dispatchEvent(new Event('input'));
+        }
+      });
     },
     on_finish: function(data) {
-      data.response_key = data.response;
-      data.response_longer = data.response === 'j' ? 1 : 0;
+      document.removeEventListener('keydown', window.__adjKey);
+      data.response_mm = data.response;   // スライダー値
+      data.illusion_mm = STANDARD_MM - data.response_mm;
       data.rt_ms = data.rt;
     }
+  };
+}
+
+const practice_intro = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `<div class="instruction-box"><h2>練習試行</h2>
+    <p>まず 1 回練習します。上下の主線が同じ長さに見える位置まで外向図形をスライダーで調整し、「確定」を押してください。</p>
+    </div>`,
+  choices: ['練習を開始']
+};
+
+const practice_trial = makeAdjustTrial(
+  { angle_deg: 15, series:'up', std_side:'right', order_index: 0, condition_order: 0 },
+  true
+);
+
+const practice_end = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `<div class="instruction-box"><p>練習は以上です。本試行を開始します。</p></div>`,
+  choices: ['本試行を開始']
+};
+
+// ============================================================
+// 本試行（24 試行）構築
+// ============================================================
+function buildMainBlock() {
+  const timeline = [];
+  const condOrder = window.__condOrder || CONDITION_PERMUTATIONS[0];
+  let orderIdx = 0;
+  condOrder.forEach((angle, ci) => {
+    // 条件開始アナウンス
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<div class="instruction-box"><h2>${ci+1} / 3 条件目：鋏角 ${angle}°</h2>
+        <p>これから ${angle}° 条件の 8 試行を行います。</p>
+        <p>準備ができたら開始してください。</p></div>`,
+      choices: ['開始']
+    });
+    FIG45_ORDER.forEach((spec, ti) => {
+      orderIdx += 1;
+      timeline.push(makeAdjustTrial({
+        angle_deg: angle,
+        series: spec.series,
+        std_side: spec.stdSide,
+        order_index: orderIdx,
+        condition_order: ti + 1
+      }, false));
+    });
   });
+  return timeline;
+}
+
+// ============================================================
+// タイムライン
+// ============================================================
+const timeline = [];
+timeline.push(consent);
+timeline.push(participant_info);
+timeline.push(instructions);
+timeline.push(practice_intro);
+timeline.push(practice_trial);
+timeline.push(practice_end);
+
+// 本試行は動的構築（participant_info の on_finish で __condOrder がセットされる）
+const mainHolder = {
+  timeline: [],
+  on_timeline_start: function() {
+    // 遅延構築
+    this.timeline = buildMainBlock();
+  }
+};
+// 上記の on_timeline_start は 7.x では動的変更が反映されないため、
+// 代わりに conditional_function + 事前 push 方式で対応：
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: '<div class="instruction-box"><p>本試行の準備ができました。</p></div>',
+  choices: ['開始'],
+  on_finish: function() {
+    const mainBlock = buildMainBlock();
+    // 残りの timeline に挿入
+    mainBlock.forEach(n => jsPsych.addNodeToEndOfTimeline(n));
+  }
 });
 
-// 休憩を挿入（30試行後）
-const breakTrial = {
+const thanks = {
   type: jsPsychHtmlButtonResponse,
-  stimulus: `
-    <div class="instruction-box">
-      <h2>休憩</h2>
-      <p>前半終了です。少し休んでください。</p>
-      <p>準備ができたら続けてください。</p>
-      <div class="key-instruction">
-        <span class="key-box">F</span> 短い
-        &nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="key-box">J</span> 長い
-      </div>
-    </div>
-  `,
-  choices: ['後半を開始する']
+  stimulus: `<div class="instruction-box"><h2>実験終了</h2>
+    <p>お疲れ様でした。下のボタンを押すとデータが送信されます。</p>
+    <p>送信完了後、画面を閉じて構いません。</p></div>`,
+  choices: ['データを送信']
+};
+// thanks は本試行後に追加される（動的）
+const addThanks = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: '',
+  choices: ['（不可視）'],
+  trial_duration: 10,
+  on_start: function() {
+    jsPsych.addNodeToEndOfTimeline(thanks);
+  }
 };
 
-// 30試行後に休憩を挿入
-const firstHalf = mainTrials.slice(0, 30 * 4); // 各試行は4要素
-const secondHalf = mainTrials.slice(30 * 4);
-
-timeline.push({ timeline: firstHalf });
-timeline.push(breakTrial);
-timeline.push({ timeline: secondHalf });
-
-// ----- 6. 終了画面 -----
-const endScreen = {
-  type: jsPsychHtmlButtonResponse,
-  stimulus: `
-    <div class="instruction-box">
-      <h2>実験終了</h2>
-      <p>ご協力ありがとうございました。</p>
-      <p>データは自動的に保存されています。</p>
-      <p>このページを閉じて構いません。</p>
-    </div>
-  `,
-  choices: ['終了']
-};
-timeline.push(endScreen);
-
-// ============================================
-// 実験実行
-// ============================================
+// jsPsych 実行
 jsPsych.run(timeline);
-
 </script>
 </html>
