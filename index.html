@@ -89,13 +89,29 @@ const jsPsych = initJsPsych({
       method: 'adjustment',
       trials: mainTrials
     };
+    const showDone = (html) => {
+      document.body.innerHTML = `
+        <div style="max-width:720px;margin:80px auto;padding:40px;
+                    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;
+                    line-height:1.8;font-size:17px;text-align:center;">
+          ${html}
+        </div>`;
+    };
     fetch(GAS_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify(payload)
     })
     .then(r=>r.json())
-    .then(res => { if(!res.ok) throw new Error(res.error||'unknown'); console.log('saved',res.n,'rows'); })
+    .then(res => {
+      if(!res.ok) throw new Error(res.error||'unknown');
+      console.log('saved',res.n,'rows');
+      showDone(`
+        <h2 style="color:#2E8B7B;">✔ 送信完了</h2>
+        <p>データが正常に送信されました（<b>${res.n} 試行</b>）。</p>
+        <p>お疲れ様でした。このタブを閉じて構いません。</p>
+      `);
+    })
     .catch(err => {
       console.warn('GAS保存失敗 → CSV fallback:', err);
       const headers = ['participant_id','permutation_index','method','order_index',
@@ -113,7 +129,12 @@ const jsPsych = initJsPsych({
       a.href = URL.createObjectURL(blob);
       a.download = `muller_adj_${pid}.csv`;
       a.click();
-      alert('サーバ保存に失敗しました。\nCSVファイルがダウンロードされました。\n「学籍番号_muller.csv」にリネームしmanabaから提出してください。');
+      showDone(`
+        <h2 style="color:#c0392b;">⚠ サーバ送信失敗</h2>
+        <p>データは <b>CSV ファイル</b> としてダウンロードされました。</p>
+        <p>ファイル名を <b>「学籍番号_muller.csv」</b> にリネームし、<br>manaba から提出してください。</p>
+        <p style="color:#666;font-size:14px;">このタブを閉じて構いません。</p>
+      `);
     });
   },
   show_progress_bar: true,
