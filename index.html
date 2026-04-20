@@ -98,7 +98,21 @@ const jsPsych = initJsPsych({
     .then(res => { if(!res.ok) throw new Error(res.error||'unknown'); console.log('saved',res.n,'rows'); })
     .catch(err => {
       console.warn('GAS保存失敗 → CSV fallback:', err);
-      jsPsych.data.get().localSave('csv', `muller_adj_${pid}.csv`);
+      const headers = ['participant_id','permutation_index','method','order_index',
+                       'condition_order','angle_deg','series','std_side',
+                       'start_mm','response_mm','illusion_mm','rt_ms','user_agent'];
+      const rows = mainTrials.map(t => [
+        pid, perm, 'adjustment', t.order_index, t.condition_order,
+        t.angle_deg, t.series, t.std_side, t.start_mm, t.response_mm,
+        t.illusion_mm, t.rt_ms, navigator.userAgent
+      ]);
+      const csv = '\uFEFF' + [headers, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `muller_adj_${pid}.csv`;
+      a.click();
       alert('サーバ保存に失敗しました。\nCSVファイルがダウンロードされました。\n「学籍番号_muller.csv」にリネームしmanabaから提出してください。');
     });
   },
@@ -181,11 +195,15 @@ const consent = {
 const participant_info = {
   type: jsPsychSurveyText,
   questions: [
-    { prompt: '学籍番号（数字7桁）', name: 'participant_id', required: true },
+    { prompt: '学籍番号（半角数字 7 桁）', name: 'participant_id', required: true },
     { prompt: '氏名（漢字）', name: 'name', required: true }
   ],
   on_finish: (data) => {
     const pid = data.response.participant_id.trim();
+    if (!/^\d{7}$/.test(pid)) {
+      alert('学籍番号は半角数字 7 桁で入力してください。\nページを再読み込み（Cmd+R / Ctrl+R）してやり直してください。');
+      throw new Error('invalid_pid');
+    }
     jsPsych.data.addProperties({ participant_id: pid, name: data.response.name });
     // 学籍番号末位で順列割当
     const last = parseInt(pid.slice(-1), 10);
@@ -213,13 +231,12 @@ const instructions = {
        <li><b>主線の端ではなく、図形全体を眺めて</b>判断してください。</li>
        <li>定規・指で画面を測ることはしないでください。</li>
      </ul>
-     <div class="note-box">系列には <b>上昇</b>（短→長）と <b>下降</b>（長→短）があり、
-     開始位置が毎回異なります。</div>
+     <div class="note-box">試行ごとにスライダーの <b>開始位置</b> が異なります。</div>
      </div>`,
     `<div class="instruction-box"><h2>試行構成</h2>
-     <p>鋏角 3 条件（15°/30°/60°）× 各 8 試行 = <b>合計 24 試行</b></p>
-     <p>条件の順序はあなたの学籍番号に応じて自動割当されます。</p>
-     <p>各条件の開始時に案内が出ます。疲れたら条件間で小休憩可能です。</p>
+     <p>全 <b>3 ブロック × 8 試行 = 合計 24 試行</b>（約 15 分）</p>
+     <p>ブロックの順序は参加者ごとに異なります（自動割当）。</p>
+     <p>各ブロックの開始時に案内が出ます。疲れたらブロック間で小休憩可能です。</p>
      </div>`
   ],
   show_clickable_nav: true,
@@ -251,8 +268,7 @@ function makeAdjustTrial(params, isPractice) {
       // 初期描画
       trial.stimulus = `
         <div class="trial-info">
-          ${isPractice ? '【練習試行】' : `試行 ${params.order_index} / 24（${params.angle_deg}° 条件 ${params.condition_order}/8）`}
-          ・ 系列: ${params.series==='up'?'上昇':'下降'} ・ 標準: ${params.std_side==='left'?'左':'右'}
+          ${isPractice ? '【練習試行】' : `試行 ${params.order_index} / 24`}
         </div>
         <div id="stim-area">${buildPairSVG(params.angle_deg, startMm, params.std_side)}</div>
         <div class="hint">スライダーを動かすか ← / → キーで 1 mm 単位に調整できます。</div>
@@ -315,8 +331,8 @@ function buildMainBlock() {
     // 条件開始アナウンス
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `<div class="instruction-box"><h2>${ci+1} / 3 条件目：鋏角 ${angle}°</h2>
-        <p>これから ${angle}° 条件の 8 試行を行います。</p>
+      stimulus: `<div class="instruction-box"><h2>${ci+1} / 3 ブロック目</h2>
+        <p>これから 8 試行を行います。図形の見え方が前のブロックと少し変わることがあります。</p>
         <p>準備ができたら開始してください。</p></div>`,
       choices: ['開始']
     });
