@@ -216,13 +216,13 @@ const consent = {
 const participant_info = {
   type: jsPsychSurveyText,
   questions: [
-    { prompt: '学籍番号（半角数字 7 桁）', name: 'participant_id', required: true },
+    { prompt: '学籍番号（半角数字 8 桁）', name: 'participant_id', required: true },
     { prompt: '氏名（漢字）', name: 'name', required: true }
   ],
   on_finish: (data) => {
     const pid = data.response.participant_id.trim();
-    if (!/^\d{7}$/.test(pid)) {
-      alert('学籍番号は半角数字 7 桁で入力してください。\nページを再読み込み（Cmd+R / Ctrl+R）してやり直してください。');
+    if (!/^\d{8}$/.test(pid)) {
+      alert('学籍番号は半角数字 8 桁で入力してください。\nページを再読み込み（Cmd+R / Ctrl+R）してやり直してください。');
       throw new Error('invalid_pid');
     }
     jsPsych.data.addProperties({ participant_id: pid, name: data.response.name });
